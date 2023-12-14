@@ -1,53 +1,75 @@
 import pygame
 from OpenGL.GL import *
+from OpenGL.GLUT import *
+from OpenGL.GLU import *
 
-class CircleDrawer:
-    def __init__(self, width, height):
-        self.width = width
-        self.height = height
-        self.radius = 200  # Set default radius
-        pygame.init()
-        pygame.display.set_mode((width, height), pygame.OPENGL | pygame.DOUBLEBUF)
-        glOrtho(-width/2, width/2, -height/2, height/2, -1, 1)
+def midPointCircleDraw(x_centre, y_centre, r):
+    pygame.init()
+    width, height = 800, 600
+    screen = pygame.display.set_mode((width, height), pygame.OPENGL | pygame.DOUBLEBUF)
+    gluOrtho2D(-width / 2, width / 2, -height / 2, height / 2)
 
-    def draw_circle(self):
+    glClearColor(0, 0, 0, 1)
+    glClear(GL_COLOR_BUFFER_BIT)
+    glColor3f(1, 1, 1)
+    glPointSize(1)
+
+    x = r
+    y = 0
+    P = 1 - r
+
+    clock = pygame.time.Clock()
+    running = True
+
+    while x > y:
         glBegin(GL_POINTS)
-        x = 0
-        y = self.radius
-        d = 1 - self.radius
-        while x <= y:
-            glVertex2f(x, y)
-            glVertex2f(-x, y)
-            glVertex2f(x, -y)
-            glVertex2f(-x, -y)
-            glVertex2f(y, x)
-            glVertex2f(-y, x)
-            glVertex2f(y, -x)
-            glVertex2f(-y, -x)
-            if d < 0:
-                d += 2 * x + 3
-            else:
-                d += 2 * (x - y) + 5
-                y -= 1
-            x += 1
+        glVertex2f(x + x_centre, y + y_centre)
+        glVertex2f(-x + x_centre, y + y_centre)
+        glVertex2f(x + x_centre, -y + y_centre)
+        glVertex2f(-x + x_centre, -y + y_centre)
         glEnd()
 
-    def run(self):
-        running = True
-        while running:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-            glClear(GL_COLOR_BUFFER_BIT)
-            glColor3f(1.0, 1.0, 1.0)
-            glPointSize(2.0)
-            self.draw_circle()
-            pygame.display.flip()
-        pygame.quit()
+        y += 1
+        if P <= 0:
+            P += 2 * y + 1
+        else:
+            x -= 1
+            P += 2 * y - 2 * x + 1
 
-def main():
-    drawer = CircleDrawer(500, 600)
-    drawer.run()
+        if x < y:
+            break
 
-if __name__ == "__main__":
-    main()
+        glBegin(GL_POINTS)
+        glVertex2f(x + x_centre, y + y_centre)
+        glVertex2f(-x + x_centre, y + y_centre)
+        glVertex2f(x + x_centre, -y + y_centre)
+        glVertex2f(-x + x_centre, -y + y_centre)
+        glEnd()
+
+        if x != y:
+            glBegin(GL_POINTS)
+            glVertex2f(y + x_centre, x + y_centre)
+            glVertex2f(-y + x_centre, x + y_centre)
+            glVertex2f(y + x_centre, -x + y_centre)
+            glVertex2f(-y + x_centre, -x + y_centre)
+            glEnd()
+
+        pygame.display.flip()
+        clock.tick(60)
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+
+    while running:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                running = False
+        clock.tick(30)
+
+    pygame.quit()
+
+if __name__ == '__main__':
+    # To draw a circle of radius 3 centered at (0, 0)
+    midPointCircleDraw(100, 100, 130)
+
