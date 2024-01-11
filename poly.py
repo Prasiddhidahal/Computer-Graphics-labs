@@ -1,62 +1,100 @@
 import pygame
+from pygame.locals import *
 from OpenGL.GL import *
 from OpenGL.GLUT import *
-from OpenGL.GLU import *
 
-# Define window boundaries
-xmin, ymin = 50, 50
-xmax, ymax = 150, 150
+SCREEN_WIDTH = 800
+SCREEN_HEIGHT = 1000
 
-# Define a polygon
-polygon = [
-    (100, 75),
-    (120, 100),
-    (140, 75),
-    (120, 50)
-]
+# Constants defining the region codes
+INSIDE = 0
+LEFT = 1
+RIGHT = 2
+BOTTOM = 4
+TOP = 8
 
-# Clip the polygon using Sutherland-Hodgman algorithm
-def sutherland_hodgman_polygon_clip(polygon):
-    output = polygon[:]
-    sides = [
-        (xmin, ymin, xmax, ymin),
-        (xmax, ymin, xmax, ymax),
-        (xmax, ymax, xmin, ymax),
-        (xmin, ymax, xmin, ymin)
-    ]
+def lineDDA(x0, y0, xEnd, yEnd):
+    dx = xEnd - x0
+    dy = yEnd - y0
+    x = x0
+    y = y0
 
-    for edge in sides:
-        input_polygon = output[:]
-        output = []
+    if abs(dx) > abs(dy):
+        steps = abs(dx)
+    else:
+        steps = abs(dy)
 
-        (x1, y1), (x2, y2) = edge[0:2], edge[2:4]
-        for i in range(len(input_polygon)):
-            p1 = input_polygon[i]
-            p2 = input_polygon[(i + 1) % len(input_polygon)]
+    xIncrement = float(dx) / float(steps)
+    yIncrement = float(dy) / float(steps)
 
-            inside_p1 = (x2 - x1) * (p1[1] - y1) > (y2 - y1) * (p1[0] - x1)
-            inside_p2 = (x2 - x1) * (p2[1] - y1) > (y2 - y1) * (p2[0] - x1)
+    glBegin(GL_POINTS)
 
-            if inside_p1 and inside_p2:
-                output.append(p2)
-            elif inside_p1 and not inside_p2:
-                intersection_x = x1 + (x2 - x1) * (y1 - p1[1]) / (p2[1] - p1[1])
-                intersection_y = y1 + (y2 - y1) * (p1[0] - x1) / (x2 - x1)
-                output.append((intersection_x, y1))
-                output.append((p2[0], intersection_y))
-            elif not inside_p1 and inside_p2:
-                intersection_x = x1 + (x2 - x1) * (y1 - p1[1]) / (p2[1] - p1[1])
-                intersection_y = y1 + (y2 - y1) * (p1[0] - x1) / (x2 - x1)
-                output.append((intersection_x, y1))
-        output = [p for p in output if p not in [(x1, y1), (x2, y2)]]
+    for _ in range(int(steps) + 1):
+        glVertex2d(round(x), round(y))
+        x += xIncrement
+        y += yIncrement
 
-    return output
+    glEnd()
 
-def main():
+def calculate_intersection(p1, p2, p3, p4):
+    x1, y1 = p1
+    x2, y2 = p2
+    x3, y3 = p3
+    x4, y4 = p4
+
+    denominator = ((x1 - x2) * (y3 - y4)) - ((y1 - y2) * (x3 - x4))
+
+    # Check if the lines are parallel or coincident
+    if denominator == 0:
+        return None
+
+    px = (((x1 * y2) - (y1 * x2)) * (x3 - x4) - (x1 - x2) * ((x3 * y4) - (y3 * x4))) / denominator
+    py = (((x1 * y2) - (y1 * x2)) * (y3 - y4) - (y1 - y2) * ((x3 * y4) - (y3 * x4))) / denominator
+
+    return px, py
+
+def sutherland_hodgman(subject_polygon, clip_polygon):
+    output_list = subject_polygon[:]
+    clip_edges = len(clip_polygon)
+    result = []
+
+    for i in range(clip_edges):
+        input_list = output_list[:]
+        output_list.clear()
+
+        edge_start = clip_polygon[i]
+        edge_end = clip_polygon[(i + 1) % clip_edges]
+
+        for j in range(len(input_list)):
+            current_point = input_list[j]
+            previous_point = input_list[(j - 1) % len(input_list)]
+
+            # Check if the current point is inside or outside the clipping edge
+            if (edge_end[0] - edge_start[0]) * (current_point[1] - edge_start[1]) - (edge_end[1] - edge_start[1]) * (
+                    current_point[0] - edge_start[0]) >= 0:
+                if (edge_end[0] - edge_start[0]) * (previous_point[1] - edge_start[1]) - (
+                        edge_end[1] - edge_start[1]) * (previous_point[0] - edge_start[0]) < 0:
+                    # Calculate intersection point and add it to the output list
+                    intersection = calculate_intersection(edge_start, edge_end, previous_point, current_point)
+                    if intersection:
+                        output_list.append(intersection)
+                output_list.append(current_point)
+            elif (edge_end[0] - edge_start[0]) * (previous_point[1] - edge_start[1]) - (
+                    edge_end[1] - edge_start[1]) * (previous_point[0] - edge_start[0]) >= 0:
+                # Calculate intersection point and add it to the output list
+                intersection = calculate_intersection(edge_start, edge_end, previous_point, current_point)
+                if intersection:
+                    output_list.append(intersection)
+
+    result = output_list
+
     pygame.init()
-    display = (500, 500)
-    pygame.display.set_mode(display, pygame.OPENGL | pygame.DOUBLEBUF)
-    gluOrtho2D(0, 500, 0, 500)
+    pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT), DOUBLEBUF | OPENGL)
+    glViewport(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT)
+    glMatrixMode(GL_PROJECTION)
+    glLoadIdentity()
+    glOrtho(-SCREEN_WIDTH / 2, SCREEN_WIDTH / 2, -SCREEN_HEIGHT / 2, SCREEN_HEIGHT / 2, -1, 1)
+    glMatrixMode(GL_MODELVIEW)
 
     while True:
         for event in pygame.event.get():
@@ -65,33 +103,32 @@ def main():
                 quit()
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
-        glColor3f(1.0, 0.0, 0.0)  # Red color
+        glLoadIdentity()
 
-        # Draw the polygon with red color
-        glBegin(GL_POLYGON)
-        for vertex in polygon:
-            glVertex2f(*vertex)
+        #  original subject polygon
+        glColor3f(0.0, 0.0, 1.0)
+        glBegin(GL_LINE_LOOP)
+        for vertex in subject_polygon:
+            glVertex2f(vertex[0], vertex[1])
         glEnd()
 
-        # Draw the clipping window with green color
+        #  clipping window
+        glColor3f(1.0, 0.0, 0.0)
+        glBegin(GL_LINE_LOOP)
+        for vertex in clip_polygon:
+            glVertex2f(vertex[0], vertex[1])
+        glEnd()
+
+        #  resulting clipped polygon
         glColor3f(0.0, 1.0, 0.0)
         glBegin(GL_LINE_LOOP)
-        glVertex2f(xmin, ymin)
-        glVertex2f(xmax, ymin)
-        glVertex2f(xmax, ymax)
-        glVertex2f(xmin, ymax)
-        glEnd()
-
-        # Perform polygon clipping and draw the result
-        clipped_polygon = sutherland_hodgman_polygon_clip(polygon)
-        glColor3f(0.0, 0.0, 1.0)  # Blue color for clipped polygon
-        glBegin(GL_POLYGON)
-        for vertex in clipped_polygon:
-            glVertex2f(*vertex)
+        for vertex in result:
+            glVertex2f(vertex[0], vertex[1])
         glEnd()
 
         pygame.display.flip()
-        pygame.time.wait(10)
 
-if __name__ == "__main__":
-    main()
+subject_polygon = [(150, 150), (100, 50), (300, 150), (300, 300), (200, 300), (200, 200), (150, 350), (100, 350), (100, 200)]
+clip_polygon = [(100, 100), (300, 100), (300, 300), (100, 300)]
+
+sutherland_hodgman(subject_polygon, clip_polygon)
